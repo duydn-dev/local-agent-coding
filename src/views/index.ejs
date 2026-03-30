@@ -1,0 +1,235 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Trợ lý Code AI Local</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <link rel="stylesheet" href="/public/style.css" />
+    <script>
+      window.DEBUG_AGENT_BACKEND = "<%= backendBase %>" || "";
+    </script>
+  </head>
+  <body class="h-screen bg-zinc-950 text-zinc-100 flex flex-col">
+    <div id="app" class="flex-1 min-h-0 flex flex-col">
+      <!-- Thanh trên -->
+      <div class="h-10 flex items-center justify-between px-3 bg-zinc-900 border-b border-zinc-800">
+        <div class="flex items-center gap-2">
+          <div class="relative">
+            <button id="btnMenuFile" class="px-2 py-1 rounded-md hover:bg-zinc-800 text-[12px] font-semibold text-zinc-200">
+              Tệp
+            </button>
+            <div id="menuFile" class="hidden absolute left-0 top-9 z-50 w-56 rounded-md border border-zinc-800 bg-zinc-900 shadow-xl">
+              <button id="miOpenFile" class="w-full text-left px-3 py-2 text-sm hover:bg-zinc-800">Mở tệp...</button>
+              <button id="miOpenFolder" class="w-full text-left px-3 py-2 text-sm hover:bg-zinc-800">Mở thư mục...</button>
+              <div class="border-t border-zinc-800 my-1"></div>
+              <button id="miCloseMenu" class="w-full text-left px-3 py-2 text-sm hover:bg-zinc-800 text-zinc-400">Đóng</button>
+            </div>
+          </div>
+
+          <!-- Hidden pickers -->
+          <input id="filePicker" type="file" class="hidden" />
+          <input id="folderPicker" type="file" class="hidden" webkitdirectory directory multiple />
+        </div>
+        <div class="flex items-center gap-2">
+          <div id="recoveryBanner" class="hidden text-[11px] text-yellow-300">Đã khôi phục bản nháp</div>
+          <div class="text-[11px] text-zinc-400">Cổng: 5173</div>
+        </div>
+      </div>
+
+      <!-- Main layout -->
+      <div class="flex-1 min-h-0 flex">
+        <!-- Activity bar -->
+        <div class="w-12 bg-zinc-900 border-r border-zinc-800 flex flex-col items-center py-2 gap-2">
+          <button id="btnViewExplorer" class="w-9 h-9 rounded-md hover:bg-zinc-800 border border-transparent text-zinc-300" title="Trình khám phá">
+            <i class="fa-regular fa-folder-open text-lg"></i>
+          </button>
+          <button id="btnViewSearch" class="w-9 h-9 rounded-md hover:bg-zinc-800 border border-transparent text-zinc-300" title="Tìm kiếm">
+            <i class="fa-solid fa-magnifying-glass text-lg"></i>
+          </button>
+          <button id="btnViewSource" class="w-9 h-9 rounded-md hover:bg-zinc-800 border border-transparent text-zinc-300" title="Quản lý mã nguồn">
+            <i class="fa-solid fa-code-branch text-lg"></i>
+          </button>
+        </div>
+
+        <!-- Explorer -->
+        <aside id="sidebar" class="bg-zinc-900 border-r border-zinc-800 flex flex-col min-h-0" style="width: 288px;">
+          <div class="px-3 py-2 text-[11px] font-semibold tracking-wide text-zinc-300 border-b border-zinc-800">
+            <div class="flex items-center justify-between">
+              <span id="sidebarTitle">TRÌNH KHÁM PHÁ</span>
+              <button id="btnMinSidebar" class="w-7 h-7 -my-1 rounded-md hover:bg-zinc-800 text-zinc-300" title="Thu gọn thanh bên trái">
+                <i class="fa-solid fa-window-minimize"></i>
+              </button>
+            </div>
+          </div>
+
+          <div id="sidebarBody" class="p-3 flex flex-col min-h-0 gap-3">
+            <!-- Workspace view -->
+            <div id="viewExplorer" class="flex-1 min-h-0 flex flex-col gap-3">
+              <div class="flex-1 min-h-0 flex flex-col">
+                <div class="text-[11px] font-semibold text-zinc-400 mb-2 shrink-0">WORKSPACE</div>
+                <div id="tree" class="text-sm flex-1 min-h-0 overflow-auto rounded-md border border-zinc-800 bg-zinc-950/30 p-2"></div>
+              </div>
+            </div>
+
+            <!-- Search view -->
+            <div id="viewSearch" class="flex-1 min-h-0 flex flex-col gap-2 hidden">
+              <div class="text-[11px] font-semibold text-zinc-400 shrink-0">TÌM KIẾM</div>
+              <div class="space-y-2 rounded-md border border-zinc-800 bg-zinc-950/30 p-2 shrink-0">
+                <div class="text-[11px] font-semibold text-zinc-400">TÌM / THAY THẾ (FILE HIỆN TẠI)</div>
+                <input id="findText" class="w-full rounded-md bg-zinc-950 border border-zinc-800 px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-indigo-500/40" placeholder="Tìm..." />
+                <input id="replaceText" class="w-full rounded-md bg-zinc-950 border border-zinc-800 px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-indigo-500/40" placeholder="Thay thế..." />
+                <div class="flex gap-2">
+                  <button id="btnFindInFile" class="rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-3 py-1 text-sm">Tìm</button>
+                  <button id="btnReplaceAllInFile" class="rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-3 py-1 text-sm">Thay tất cả</button>
+                </div>
+                <div id="findStats" class="text-[11px] text-zinc-400"></div>
+              </div>
+              <div class="flex gap-2 shrink-0">
+                <input id="searchKeyword" class="w-full rounded-md bg-zinc-950 border border-zinc-800 px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-indigo-500/40" placeholder="Tìm trong mã nguồn..." />
+                <button id="btnSearch" class="rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-3 py-1 text-sm">Tìm</button>
+              </div>
+              <div id="searchResults" class="mt-2 space-y-2 overflow-auto flex-1 min-h-0"></div>
+            </div>
+
+            <!-- Source Control view -->
+            <div id="viewScm" class="flex-1 min-h-0 flex flex-col gap-2 hidden">
+              <div class="text-[11px] font-semibold text-zinc-400 shrink-0">QUẢN LÝ MÃ NGUỒN</div>
+              <div class="flex flex-wrap gap-2 shrink-0">
+                <button id="btnGitStatus" class="rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-2 py-1 text-xs">Trạng thái</button>
+                <button id="btnGitDiff" class="rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-2 py-1 text-xs">Khác biệt</button>
+                <button id="btnGitCommit" class="rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-2 py-1 text-xs">Commit</button>
+              </div>
+              <div class="flex gap-2 shrink-0">
+                <input id="gitRollbackFile" class="w-full rounded-md bg-zinc-950 border border-zinc-800 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-indigo-500/40" placeholder="Hoàn tác file (vd: src/app.js)" />
+                <button id="btnGitRollback" class="rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-2 py-1 text-xs">Hoàn tác</button>
+              </div>
+              <pre id="gitOut" class="mono overflow-auto rounded-md border border-zinc-800 bg-zinc-950 p-2 flex-1 min-h-0"></pre>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Sidebar resizer -->
+        <div id="sidebarResizer" class="w-1 cursor-col-resize bg-zinc-900 hover:bg-indigo-500/40"></div>
+
+        <!-- Editor + right pane -->
+        <div class="flex-1 min-w-0 min-h-0 flex">
+          <!-- Editor + bottom panel -->
+          <main id="main" class="flex-1 min-w-0 min-h-0 flex flex-col">
+          <!-- Tabs -->
+          <div id="tabs" class="h-9 bg-zinc-900 border-b border-zinc-800 flex items-stretch overflow-x-auto"></div>
+
+          <!-- Monaco editor -->
+          <div class="flex-1 min-h-0 bg-zinc-950">
+            <div id="editor" class="h-full w-full"></div>
+          </div>
+
+          <!-- Panel resizer -->
+          <div id="panelResizer" class="h-1 cursor-row-resize bg-zinc-900 hover:bg-indigo-500/40"></div>
+
+          <!-- Bottom panel -->
+          <div id="bottomPanel" class="bg-zinc-900 border-t border-zinc-800 flex flex-col min-w-0" style="height: 288px;">
+            <div class="h-8 shrink-0 flex items-center justify-between px-3 border-b border-zinc-800">
+              <div class="flex items-center gap-2 text-[11px] font-semibold tracking-wide text-zinc-300">
+                <button id="tabTerminal" class="px-2 py-1 rounded-md bg-zinc-800 border border-zinc-700">Terminal</button>
+                <button id="tabDiff" class="px-2 py-1 rounded-md hover:bg-zinc-800 border border-transparent">So sánh</button>
+              </div>
+              <button id="btnMinBottom" class="w-7 h-7 rounded-md hover:bg-zinc-800 text-zinc-300" title="Thu gọn bảng dưới">
+                <i class="fa-solid fa-window-minimize"></i>
+              </button>
+            </div>
+
+            <div class="flex-1 min-h-0">
+              <div id="terminalPanel" class="min-w-0 h-full p-3 flex flex-col min-h-0">
+                <div class="flex items-center gap-2 mb-2 shrink-0">
+                  <select id="terminalPreset" class="rounded-md bg-zinc-950 border border-zinc-800 px-2 py-1 text-xs outline-none">
+                    <option value="npm|run|dev">npm run dev</option>
+                    <option value="npm|test">npm test</option>
+                    <option value="node|src/server.js">node src/server.js</option>
+                  </select>
+                  <input id="terminalCmd" class="flex-1 rounded-md bg-zinc-950 border border-zinc-800 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-indigo-500/40" placeholder="Gõ lệnh (vd: npm run dev)..." />
+                  <button id="btnTerminalRun" class="rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-2 py-1 text-xs">Chạy</button>
+                  <button id="btnTerminalStop" class="rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-2 py-1 text-xs">Dừng</button>
+                  <button id="btnTerminalClear" class="rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-2 py-1 text-xs">Xoá</button>
+                </div>
+                <pre id="terminalOut" class="mono flex-1 min-h-0 overflow-auto rounded-md border border-zinc-800 bg-zinc-950 p-2"></pre>
+              </div>
+
+              <div id="diffPanel" class="min-w-0 h-full p-3 hidden">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="text-[11px] font-semibold tracking-wide text-zinc-300">SO SÁNH</div>
+                  <div class="flex gap-2">
+                    <button id="btnAccept" class="rounded-md bg-emerald-600 hover:bg-emerald-500 px-2 py-1 text-xs font-medium">Chấp nhận</button>
+                    <button id="btnReject" class="rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-2 py-1 text-xs">Huỷ</button>
+                  </div>
+                </div>
+                <div id="diffLines" class="h-[210px] overflow-auto rounded-md border border-zinc-800 bg-zinc-950"></div>
+              </div>
+            </div>
+          </div>
+          </main>
+
+          <!-- Right pane resizer -->
+          <div id="rightResizer" class="w-1 cursor-col-resize bg-zinc-900 hover:bg-indigo-500/40"></div>
+
+          <!-- Right pane (Chat + History) -->
+          <aside id="rightPane" class="bg-zinc-900 border-l border-zinc-800 flex flex-col min-h-0" style="width: 320px;">
+            <div class="px-3 py-2 text-[11px] font-semibold tracking-wide text-zinc-300 border-b border-zinc-800">
+              <div class="flex items-center justify-between">
+                <span>TRỢ LÝ</span>
+                <button id="btnMinRight" class="w-7 h-7 -my-1 rounded-md hover:bg-zinc-800 text-zinc-300" title="Thu gọn thanh bên phải">
+                  <i class="fa-solid fa-window-minimize"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="p-3 flex-1 min-h-0 overflow-hidden">
+              <div id="chatPanel" class="min-w-0 h-full flex flex-col min-h-0">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="text-[11px] font-semibold tracking-wide text-zinc-300">TRÒ CHUYỆN</div>
+                  <button id="btnHistory" class="rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-2 py-1 text-xs">Tải lịch sử</button>
+                </div>
+
+                <div class="flex gap-2 mb-2 shrink-0">
+                  <input id="chatInput" class="flex-1 rounded-md bg-zinc-950 border border-zinc-800 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-indigo-500/40" placeholder="Nhập yêu cầu (multi-turn)..." />
+                  <button id="btnSend" class="rounded-md bg-indigo-600 hover:bg-indigo-500 px-2 py-1 text-xs font-medium">Gửi</button>
+                  <button id="btnClearChat" class="rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-2 py-1 text-xs">Xoá</button>
+                </div>
+
+                <div id="chatMessages" class="flex-1 min-h-0 overflow-auto rounded-md border border-zinc-800 bg-zinc-950 p-2"></div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status bar (inside body flex so no overlap) -->
+    <div id="statusbar" class="h-6 shrink-0 bg-indigo-700 text-indigo-50 flex items-center justify-between px-3 text-[11px]">
+      <div class="flex items-center gap-3">
+        <div id="statusWorkspace" class="truncate max-w-[40vw]">Không gian: -</div>
+        <div id="statusFile" class="truncate max-w-[40vw]">File: -</div>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2">
+          <div class="opacity-90">Mô hình</div>
+          <input
+            id="modelInput"
+            list="modelList"
+            class="h-5 w-[260px] rounded bg-indigo-800/60 border border-indigo-200/30 px-2 text-[11px] text-indigo-50 outline-none placeholder:text-indigo-100/60"
+            placeholder="Gõ để tìm model... (để trống = tự động)"
+          />
+          <datalist id="modelList"></datalist>
+        </div>
+        <div id="statusPos">Dòng -, Cột -</div>
+      </div>
+    </div>
+
+    <script src="/public/js/autosave-manager.js"></script>
+    <script src="/public/js/workspace-profile-manager.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.33.0/min/vs/loader.js"></script>
+    <script src="/public/app.js"></script>
+  </body>
+</html>
+

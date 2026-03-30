@@ -1,0 +1,14 @@
+/* Keep only the few things Tailwind doesn't cover. */
+#tree ul { list-style: none; padding-left: 10px; }
+#tree li { cursor: pointer; padding: 2px 6px; border-radius: 6px; }
+#tree li:hover { background: rgba(99, 102, 241, 0.12); }
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+/* Better tree density */
+#tree li { line-height: 20px; }
+
