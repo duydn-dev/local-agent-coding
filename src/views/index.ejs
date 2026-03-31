@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <link rel="stylesheet" href="/public/style.css" />
+    <script src="https://js.puter.com/v2/"></script>
     <script>
       window.DEBUG_AGENT_BACKEND = "<%= backendBase %>" || "";
     </script>
@@ -23,6 +24,7 @@
             <div id="menuFile" class="hidden absolute left-0 top-9 z-50 w-56 rounded-md border border-zinc-800 bg-zinc-900 shadow-xl">
               <button id="miOpenFile" class="w-full text-left px-3 py-2 text-sm hover:bg-zinc-800">Mở tệp...</button>
               <button id="miOpenFolder" class="w-full text-left px-3 py-2 text-sm hover:bg-zinc-800">Mở thư mục...</button>
+              <button id="miPuterSignIn" class="w-full text-left px-3 py-2 text-sm hover:bg-zinc-800">Đăng nhập Puter...</button>
               <div class="border-t border-zinc-800 my-1"></div>
               <button id="miCloseMenu" class="w-full text-left px-3 py-2 text-sm hover:bg-zinc-800 text-zinc-400">Đóng</button>
             </div>
@@ -153,6 +155,13 @@
                   <button id="btnTerminalStop" class="rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-2 py-1 text-xs">Dừng</button>
                   <button id="btnTerminalClear" class="rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-2 py-1 text-xs">Xoá</button>
                 </div>
+                <div id="actionQueue" class="hidden shrink-0 mb-2 rounded-md border border-zinc-800 bg-zinc-950/30 p-2">
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="text-[11px] font-semibold tracking-wide text-zinc-300">HÀNH ĐỘNG ĐỀ XUẤT</div>
+                    <button id="btnClearActions" class="rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-2 py-1 text-[10px]">Xoá</button>
+                  </div>
+                  <div id="actionItems" class="space-y-2"></div>
+                </div>
                 <pre id="terminalOut" class="mono flex-1 min-h-0 overflow-auto rounded-md border border-zinc-800 bg-zinc-950 p-2"></pre>
               </div>
 
@@ -221,6 +230,13 @@
             placeholder="Gõ để tìm model... (để trống = tự động)"
           />
           <datalist id="modelList"></datalist>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="opacity-90">Thực thi</div>
+          <label class="flex items-center gap-1 cursor-pointer select-none">
+            <input id="autoExecuteToggle" type="checkbox" class="accent-indigo-200" />
+            <span id="autoExecuteLabel" class="text-indigo-50/90">Phê duyệt</span>
+          </label>
         </div>
         <div id="statusPos">Dòng -, Cột -</div>
       </div>

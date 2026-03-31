@@ -11,11 +11,11 @@ class SmartActionService {
     const ctx = codeContext.getCurrentContext();
     const logs = terminalService.getLogs().join('\n');
 
-    const puter = getPuter();
+    const puter = await getPuter();
     if (!puter) {
       onChunk({
         type: 'text',
-        content: 'Thiếu PUTER_AUTH_TOKEN trong env. Không thể chạy smart actions.\n'
+        content: 'Thiếu Puter auth token. Hãy đăng nhập bằng getAuthToken() hoặc set PUTER_AUTH_TOKEN.\n'
       });
       return;
     }

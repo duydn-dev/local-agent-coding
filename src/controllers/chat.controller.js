@@ -23,8 +23,10 @@ async function streamAgent(req, res) {
     res.end();
   } catch (err) {
     try {
-      res.status(500).json({ error: err.message });
-    } catch (e) {}
+      res.status(500).json({ error: err });
+    } catch (e) {
+
+    }
   }
 }
 

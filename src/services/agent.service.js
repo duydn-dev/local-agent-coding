@@ -30,7 +30,7 @@ ${related}
   };
 
   const messages = [systemPrompt, ...memory.getMessages()];
-  const puter = getPuter();
+  const puter = await getPuter();
 
   let assistantResponse = '';
   if (!puter) {

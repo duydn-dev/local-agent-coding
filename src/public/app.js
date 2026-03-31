@@ -36,6 +36,18 @@
     return (selectedModel || '').toString().trim();
   }
 
+  function getPuterClient() {
+    return window.puter || null;
+  }
+
+  function isPuterAiReady() {
+    return !!(getPuterClient()?.ai?.chat);
+  }
+
+  const clientChatHistory = [];
+  let autoExecute = false;
+  let pendingActions = [];
+
   async function loadModelsIntoSelect() {
     // Backward-compat name; now uses searchable input + datalist
     const input = el('modelInput');
@@ -50,21 +62,19 @@
     const known = new Set();
 
     try {
-      const res = await fetch(api('/ai/models'));
-      const json = await res.json();
-      const models = Array.isArray(json.models) ? json.models : [];
-
-      for (const m of models) {
-        const id = typeof m === 'string' ? m : m?.id || m?.name || m?.model || '';
-        if (!id || known.has(id)) continue;
-        known.add(id);
-        const opt = document.createElement('option');
-        opt.value = id;
-        list.appendChild(opt);
+      const puter = getPuterClient();
+      if (puter?.ai?.listModels) {
+        const models = await puter.ai.listModels(null);
+        for (const m of models || []) {
+          const id = typeof m === 'string' ? m : m?.id || m?.name || m?.model || '';
+          if (!id || known.has(id)) continue;
+          known.add(id);
+          const opt = document.createElement('option');
+          opt.value = id;
+          list.appendChild(opt);
+        }
       }
-    } catch (e) {
-      // ignore; user can still type manually / leave blank
-    }
+    } catch (e) {}
 
     function commitModelFromInput() {
       const v = (input.value || '').toString().trim();
@@ -437,52 +447,145 @@
     el('chatInput').value = '';
     appendMessage('user', text);
 
-    const res = await fetch(api('/agent/stream'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: text, model: getSelectedModel() || null })
-    });
-    if (!res.body) return alert('No stream body');
+    if (!isPuterAiReady()) {
+      appendMessage('assistant', 'Chưa sẵn sàng Puter AI ở client. Hãy refresh trang hoặc kiểm tra script Puter.');
+      return;
+    }
 
+    const puter = getPuterClient();
     const streaming = createStreamingAssistantMessage();
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
     let assistant = '';
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const parts = buffer.split('\n\n');
-      buffer = parts.pop() || '';
-      for (const p of parts) {
-        const block = p.trim();
-        if (!block) continue;
-        if (block.startsWith('event: done')) continue;
-        const dataLine = block
-          .split('\n')
-          .map((x) => x.trim())
-          .find((x) => x.startsWith('data:'));
-        if (!dataLine) continue;
-        const raw = dataLine.replace(/^data:\s*/, '');
-        let data;
-        try {
-          data = JSON.parse(raw);
-        } catch (e) {
-          continue;
-        }
-        if (data.type === 'text') {
-          assistant += data.content || '';
-          streaming.body.textContent = assistant;
-          el('chatMessages').scrollTop = el('chatMessages').scrollHeight;
-        }
+
+    // Maintain local chat history for better multi-turn
+    clientChatHistory.push({ role: 'user', content: text });
+    const model = getSelectedModel() || undefined;
+    try {
+      const resp = await puter.ai.chat(clientChatHistory, { stream: true, model });
+      for await (const part of resp) {
+        const t = part?.text ?? part?.message?.content?.toString?.() ?? '';
+        if (!t) continue;
+        assistant += t;
+        streaming.body.textContent = assistant;
+        el('chatMessages').scrollTop = el('chatMessages').scrollHeight;
+      }
+    } catch (e) {
+      assistant += `\n[Lỗi AI] ${e?.message || String(e)}`;
+      streaming.body.textContent = assistant;
+    }
+
+    clientChatHistory.push({ role: 'assistant', content: assistant });
+
+    const plan = extractActionPlan(assistant);
+    if (plan && Array.isArray(plan.actions) && plan.actions.length) {
+      setPendingActions(plan.actions);
+      if (autoExecute) {
+        await executeAllPendingActions();
       }
     }
-    // if nothing arrived, keep a visible hint
-    if (!assistant.trim()) {
-      streaming.body.textContent =
-        'Không nhận được phản hồi. Hãy kiểm tra PUTER_AUTH_TOKEN hoặc xem log server.\n';
+  }
+
+  function extractActionPlan(text) {
+    if (!text) return null;
+    // Look for ```json ... ``` block containing {"actions":[...]}
+    const m = String(text).match(/```json\s*([\s\S]*?)\s*```/i);
+    if (!m) return null;
+    try {
+      const obj = JSON.parse(m[1]);
+      if (obj && Array.isArray(obj.actions)) return obj;
+    } catch (e) {}
+    return null;
+  }
+
+  function setPendingActions(actions) {
+    pendingActions = (actions || []).map((a, idx) => ({ id: `${Date.now()}-${idx}`, ...a, status: 'pending' }));
+    renderActionQueue();
+  }
+
+  function renderActionQueue() {
+    const box = el('actionQueue');
+    const items = el('actionItems');
+    if (!box || !items) return;
+    items.innerHTML = '';
+    if (!pendingActions.length) {
+      box.classList.add('hidden');
+      return;
     }
+    box.classList.remove('hidden');
+
+    for (const a of pendingActions) {
+      const row = document.createElement('div');
+      row.className = 'rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2';
+      const title = document.createElement('div');
+      title.className = 'text-xs font-semibold text-zinc-200';
+      title.textContent = `${a.type || 'action'} ${a.status ? `(${a.status})` : ''}`;
+      const pre = document.createElement('pre');
+      pre.className = 'mono mt-1 text-zinc-200 text-[11px] whitespace-pre-wrap';
+      pre.textContent = JSON.stringify(a, null, 2);
+      const actions = document.createElement('div');
+      actions.className = 'mt-2 flex gap-2';
+
+      const btnRun = document.createElement('button');
+      btnRun.className = 'rounded-md bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-2 py-1 text-[10px]';
+      btnRun.textContent = 'Chạy';
+      btnRun.disabled = a.status !== 'pending';
+      btnRun.onclick = async () => {
+        await executeOneAction(a.id);
+      };
+
+      actions.appendChild(btnRun);
+      row.appendChild(title);
+      row.appendChild(pre);
+      row.appendChild(actions);
+      items.appendChild(row);
+    }
+  }
+
+  async function executeAllPendingActions() {
+    for (const a of pendingActions.slice()) {
+      if (a.status === 'pending') {
+        // eslint-disable-next-line no-await-in-loop
+        await executeOneAction(a.id);
+      }
+    }
+  }
+
+  async function executeOneAction(actionId) {
+    const idx = pendingActions.findIndex((x) => x.id === actionId);
+    if (idx < 0) return;
+    const a = pendingActions[idx];
+    pendingActions[idx] = { ...a, status: 'running' };
+    renderActionQueue();
+
+    try {
+      // Allowlist
+      if (a.type === 'terminal.run') {
+        const command = String(a.command || '').trim();
+        const args = Array.isArray(a.args) ? a.args.map(String) : [];
+        if (!command) throw new Error('terminal.run thiếu command');
+        // reuse terminal UI: write into cmd and run
+        if (el('terminalCmd')) el('terminalCmd').value = [command, ...args].join(' ');
+        await runTerminal();
+      } else if (a.type === 'files.write') {
+        const path = String(a.path || '').trim();
+        const content = typeof a.content === 'string' ? a.content : '';
+        if (!path) throw new Error('files.write thiếu path');
+        const res = await fetch(api('/files/write'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path, content })
+        });
+        const json = await res.json();
+        if (json.error) throw new Error(json.error);
+      } else {
+        throw new Error(`Không hỗ trợ action: ${a.type}`);
+      }
+
+      pendingActions[idx] = { ...pendingActions[idx], status: 'done' };
+    } catch (e) {
+      pendingActions[idx] = { ...pendingActions[idx], status: 'error', error: e?.message || String(e) };
+      appendTerminal(`\n[ACTION ERROR] ${pendingActions[idx].error}\n`);
+    }
+    renderActionQueue();
   }
 
   async function clearChat() {
@@ -557,40 +660,48 @@
     async function runInline(action) {
       const selectedCode = getSelectedText();
       if (!selectedCode.trim()) return alert('Chưa chọn đoạn mã nào');
-      const res = await fetch(api('/code/inline-action'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, selectedCode, model: getSelectedModel() || null })
-      });
-      if (!res.body) return alert('Không có dữ liệu stream');
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
+      if (!isPuterAiReady()) return alert('Chưa sẵn sàng Puter AI ở client. Hãy refresh trang.');
+      const puter = getPuterClient();
+
+      const promptMap = {
+        explain: 'Giải thích đoạn mã này rõ ràng, dễ hiểu.',
+        refactor: 'Refactor đoạn mã này để dễ đọc và dễ bảo trì hơn.',
+        optimize: 'Tối ưu hiệu năng và chất lượng mã cho đoạn này.',
+        test: 'Sinh unit test cho đoạn mã này.'
+      };
+
+      const ctxFile = currentPath || 'không có';
+      const ctxContent = editor ? editor.getValue() : '';
+      const model = getSelectedModel() || undefined;
+
       let out = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split('\n\n');
-        buffer = parts.pop() || '';
-        for (const p of parts) {
-          const line = p.trim();
-          if (!line.startsWith('data:')) continue;
-          const raw = line.replace(/^data:\s*/, '');
-          if (raw === '[DONE]') continue;
-          try {
-            const data = JSON.parse(raw);
-            out += data.content || '';
-          } catch (e) {}
-        }
+      const resp = await puter.ai.chat(
+        [
+          { role: 'system', content: `Bạn là trợ lý lập trình cấp cao.\nFile hiện tại: ${ctxFile}` },
+          {
+            role: 'user',
+            content: `
+Hành động: ${promptMap[action] || String(action)}
+
+Đoạn mã được chọn:
+${selectedCode}
+
+Ngữ cảnh file:
+${(ctxContent || '').split('\n').slice(0, 400).join('\n')}
+            `.trim()
+          }
+        ],
+        { stream: true, model }
+      );
+      for await (const part of resp) {
+        const t = part?.text ?? '';
+        if (!t) continue;
+        out += t;
       }
-      // Replace selection for refactor/optimize/test; explain writes to chat
-      if (action === 'explain') {
-        appendMessage('assistant', out);
-      } else {
-        editor.executeEdits('inline-action', [
-          { range: editor.getSelection(), text: out, forceMoveMarkers: true }
-        ]);
+
+      if (action === 'explain') appendMessage('assistant', out);
+      else {
+        editor.executeEdits('inline-action', [{ range: editor.getSelection(), text: out, forceMoveMarkers: true }]);
       }
     }
 
@@ -741,6 +852,7 @@
     const menuFile = el('menuFile');
     const miOpenFile = el('miOpenFile');
     const miOpenFolder = el('miOpenFolder');
+    const miPuterSignIn = el('miPuterSignIn');
     const miCloseMenu = el('miCloseMenu');
     const filePicker = el('filePicker');
     const folderPicker = el('folderPicker');
@@ -767,6 +879,33 @@
     miOpenFolder?.addEventListener('click', () => {
       closeFileMenu();
       folderPicker?.click();
+    });
+
+    // Puter sign-in (browser) per docs: must be user action
+    miPuterSignIn?.addEventListener('click', async () => {
+      closeFileMenu();
+      try {
+        if (!window.puter?.auth?.signIn) {
+          alert('Chưa tải Puter.js. Hãy thử refresh trang.');
+          return;
+        }
+        const res = await window.puter.auth.signIn();
+        const token = res?.token ? String(res.token) : '';
+        if (!token.trim()) {
+          alert('Đăng nhập xong nhưng không lấy được token.');
+          return;
+        }
+        await fetch(api('/ai/token'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token })
+        });
+        alert('Đã đăng nhập Puter.');
+        // refresh models list now that backend has token
+        loadModelsIntoSelect();
+      } catch (e) {
+        alert('Đăng nhập Puter thất bại: ' + (e?.message || String(e)));
+      }
     });
 
     async function openLocalFile(file) {
@@ -909,6 +1048,23 @@
     el('tabTerminal')?.addEventListener('click', () => setBottomTab('terminal'));
     el('tabDiff')?.addEventListener('click', () => setBottomTab('diff'));
     setBottomTab('terminal');
+
+    // Execution mode (approve vs auto)
+    const autoToggle = el('autoExecuteToggle');
+    const autoLabel = el('autoExecuteLabel');
+    const savedAuto = localStorage.getItem('autoExecute') || '0';
+    autoExecute = savedAuto === '1';
+    if (autoToggle) autoToggle.checked = autoExecute;
+    if (autoLabel) autoLabel.textContent = autoExecute ? 'Tự chạy' : 'Phê duyệt';
+    autoToggle?.addEventListener('change', () => {
+      autoExecute = !!autoToggle.checked;
+      localStorage.setItem('autoExecute', autoExecute ? '1' : '0');
+      if (autoLabel) autoLabel.textContent = autoExecute ? 'Tự chạy' : 'Phê duyệt';
+    });
+    el('btnClearActions')?.addEventListener('click', () => {
+      pendingActions = [];
+      renderActionQueue();
+    });
 
     // Terminal (SSE streaming)
     function appendTerminal(text) {

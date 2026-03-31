@@ -11,11 +11,11 @@ async function runInlineActionStream(action, selectedCode, options = {}, onChunk
     test: 'Sinh unit test cho đoạn mã này.'
   };
 
-  const puter = getPuter();
+  const puter = await getPuter();
   if (!puter) {
     onChunk({
       type: 'text',
-      content: 'Thiếu PUTER_AUTH_TOKEN trong env. Không thể chạy inline action bằng AI.\n'
+      content: 'Thiếu Puter auth token. Hãy đăng nhập bằng getAuthToken() hoặc set PUTER_AUTH_TOKEN.\n'
     });
     return;
   }

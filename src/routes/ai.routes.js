@@ -4,6 +4,7 @@ const ai = require('../controllers/ai.controller');
 const router = express.Router();
 
 router.get('/models', ai.listModels);
+router.post('/token', ai.setToken);
 
 module.exports = router;
 

@@ -4,17 +4,21 @@
   "private": true,
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "dev": "powershell -NoProfile -Command \"$owners=@(Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique); foreach($procId in $owners){ Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue }\" && nodemon --watch src --ext js,ejs,css --signal SIGTERM src/server.js"
   },
   "dependencies": {
-    "cors": "^2.8.5",
-    "ejs": "^3.1.10",
-    "glob": "^11.0.3",
-    "express": "^4.18.2",
-    "diff": "^5.0.0",
     "@heyputer/puter.js": "^2.2.14",
+    "cors": "^2.8.5",
+    "diff": "^5.0.0",
     "dotenv": "^16.6.1",
+    "ejs": "^3.1.10",
+    "express": "^4.18.2",
+    "glob": "^11.0.3",
     "simple-git": "^3.18.0",
     "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
   }
 }

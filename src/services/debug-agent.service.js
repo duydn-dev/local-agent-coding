@@ -7,11 +7,11 @@ class DebugAgentService {
     const logs = terminalService.getLogs().join('\n');
     const ctx = codeContext.getCurrentContext();
 
-    const puter = getPuter();
+    const puter = await getPuter();
     if (!puter) {
       onChunk({
         type: 'text',
-        content: 'Thiếu PUTER_AUTH_TOKEN trong env. Không thể phân tích log bằng AI.\n'
+        content: 'Thiếu Puter auth token. Hãy đăng nhập bằng getAuthToken() hoặc set PUTER_AUTH_TOKEN.\n'
       });
       return '';
     }

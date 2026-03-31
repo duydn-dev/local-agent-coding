@@ -19,7 +19,7 @@ class CodeEditService {
       throw new Error('Chưa chọn file');
     }
 
-    const puter = getPuter();
+    const puter = await getPuter();
     if (!puter) {
       const original = ctx.content || '';
       const generatedCode =
